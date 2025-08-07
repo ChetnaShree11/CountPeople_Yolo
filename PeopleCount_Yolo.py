@@ -1,77 +1,46 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
-#!pip install ultralytics opencv-python
-
-
-# In[9]:
-
-
+import streamlit as st
 import cv2
+import tempfile
 from ultralytics import YOLO
-from PIL import Image
-from IPython.display import display, clear_output
+import os
 
 # Load YOLOv8 model
 model = YOLO("yolov8n.pt")
 
-# Open webcam or replace with a video file path like 'video.mp4'
-cap = cv2.VideoCapture(0)  # Replace 0 with 'video.mp4' if needed
+st.title("People Counting with YOLOv8")
+st.markdown("Upload a video to detect and count people in it.")
 
-# Loop to capture frames
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("Failed to capture frame.")
-        break
+video_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov"])
 
-    # Run inference
-    results = model(frame)
-    count = 0
+if video_file:
+    # Save to temp file
+    tfile = tempfile.NamedTemporaryFile(delete=False)
+    tfile.write(video_file.read())
+    cap = cv2.VideoCapture(tfile.name)
 
-    # Draw bounding boxes for 'person' class (class ID = 0)
-    for box in results[0].boxes:
-        if int(box.cls[0]) == 0:
-            count += 1
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    stframe = st.empty()
 
-    # Show count on image
-    cv2.putText(frame, f"People: {count}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    # Convert and display in Jupyter
-    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    clear_output(wait=True)
-    display(Image.fromarray(img_rgb))
-    
-    # Optional: press 'q' to stop
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        results = model(frame)
+        count = 0
 
-    
+        for box in results[0].boxes:
+            if int(box.cls[0]) == 0:  # Class 0 = person
+                count += 1
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-# Release resources
-cap.release()
+        # Put count on frame
+        cv2.putText(frame, f"People: {count}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
+        # Convert color for display
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        stframe.image(frame_rgb, channels="RGB")
 
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
+    cap.release()
+    os.unlink(tfile.name)
